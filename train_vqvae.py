@@ -4,9 +4,11 @@ import os
 
 import torch
 from torch import nn, optim
-from torch.utils.data import DataLoader
+from torch.utils.data import DataLoader, Dataset
+from dataset import AudioDataset 
 
-from torchvision import datasets, transforms, utils
+from torchaudio import datasets, transforms, utils
+
 
 from tqdm import tqdm
 
@@ -27,13 +29,13 @@ def train(epoch, loader, model, optimizer, scheduler, device):
     mse_sum = 0
     mse_n = 0
 
-    for i, (img, label) in enumerate(loader):
+    for i, (song, label) in enumerate(loader):
         model.zero_grad()
 
-        img = img.to(device)
+        audio = song.to(device)
 
-        out, latent_loss = model(img)
-        recon_loss = criterion(out, img)
+        out, latent_loss = model(audio)
+        recon_loss = criterion(out, audio)
         latent_loss = latent_loss.mean()
         loss = recon_loss + latent_loss_weight * latent_loss
         loss.backward()
@@ -42,8 +44,8 @@ def train(epoch, loader, model, optimizer, scheduler, device):
             scheduler.step()
         optimizer.step()
 
-        part_mse_sum = recon_loss.item() * img.shape[0]
-        part_mse_n = img.shape[0]
+        part_mse_sum = recon_loss.item() * audio.shape[0]
+        part_mse_n = audio.shape[0]
         comm = {"mse_sum": part_mse_sum, "mse_n": part_mse_n}
         comm = dist.all_gather(comm)
 
@@ -65,14 +67,14 @@ def train(epoch, loader, model, optimizer, scheduler, device):
             if i % 100 == 0:
                 model.eval()
 
-                sample = img[:sample_size]
+                sample = audio[:sample_size]
 
                 with torch.no_grad():
                     out, _ = model(sample)
 
-                utils.save_image(
+                utils.save(
                     torch.cat([sample, out], 0),
-                    f"sample/{str(epoch + 1).zfill(5)}_{str(i).zfill(5)}.png",
+                    f"sample/{str(epoch + 1).zfill(5)}_{str(i).zfill(5)}.mp3",
                     nrow=sample_size,
                     normalize=True,
                     range=(-1, 1),
@@ -86,16 +88,16 @@ def main(args):
 
     args.distributed = dist.get_world_size() > 1
 
-    transform = transforms.Compose(
-        [
-            transforms.Resize(args.size),
-            transforms.CenterCrop(args.size),
-            transforms.ToTensor(),
-            transforms.Normalize([0.5, 0.5, 0.5], [0.5, 0.5, 0.5]),
-        ]
-    )
+    # transform = transforms.Compose(
+    #     [
+    #         transforms.Resize(args.size),
+    #         transforms.CenterCrop(args.size),
+    #         transforms.ToTensor(),
+    #         transforms.Normalize([0.5, 0.5, 0.5], [0.5, 0.5, 0.5]),
+    #     ]
+    # )
 
-    dataset = datasets.ImageFolder(args.path, transform=transform)
+    dataset = AudioDataset(args.path)
     sampler = dist.data_sampler(dataset, shuffle=True, distributed=args.distributed)
     loader = DataLoader(
         dataset, batch_size=128 // args.n_gpu, sampler=sampler, num_workers=2

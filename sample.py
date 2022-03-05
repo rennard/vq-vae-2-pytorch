@@ -2,7 +2,7 @@ import argparse
 import os
 
 import torch
-from torchvision.utils import save_image
+from torchaudio.utils import save
 from tqdm import tqdm
 
 from vqvae import VQVAE
@@ -97,4 +97,4 @@ if __name__ == '__main__':
     decoded_sample = model_vqvae.decode_code(top_sample, bottom_sample)
     decoded_sample = decoded_sample.clamp(-1, 1)
 
-    save_image(decoded_sample, args.filename, normalize=True, range=(-1, 1))
+    save(decoded_sample, args.filename, normalize=True, range=(-1, 1))
