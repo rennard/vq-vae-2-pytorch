@@ -13,5 +13,6 @@ class AudioDataset(Dataset):
 
     def __getitem__(self, index):
         audio_path = f"{self.path}/{self.info.iloc[index][1]}"
+        print(self.info.iloc(index)[1])
         signal, sr = torchaudio.load(audio_path)
         return signal
