@@ -106,3 +106,9 @@ venv.bak/
 # for testing
 dataset/
 test_run.py
+
+# output data
+sample/
+
+# mac files
+.DS_Store

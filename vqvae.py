@@ -83,9 +83,9 @@ class ResBlock(nn.Module):
 
         self.conv = nn.Sequential(
             nn.ReLU(),
-            nn.Conv2d(in_channel, channel, 3, padding=1),
+            nn.Conv1d(in_channel, channel, 3, padding=1),
             nn.ReLU(inplace=True),
-            nn.Conv2d(channel, in_channel, 1),
+            nn.Conv1d(channel, in_channel, 1),
         )
 
     def forward(self, input):
@@ -101,18 +101,18 @@ class Encoder(nn.Module):
 
         if stride == 4:
             blocks = [
-                nn.Conv2d(in_channel, channel // 2, 4, stride=2, padding=1),
+                nn.Conv1d(in_channel, channel // 2, 4, stride=2, padding=1),
                 nn.ReLU(inplace=True),
-                nn.Conv2d(channel // 2, channel, 4, stride=2, padding=1),
+                nn.Conv1d(channel // 2, channel, 4, stride=2, padding=1),
                 nn.ReLU(inplace=True),
-                nn.Conv2d(channel, channel, 3, padding=1),
+                nn.Conv1d(channel, channel, 3, padding=1),
             ]
 
         elif stride == 2:
             blocks = [
-                nn.Conv2d(in_channel, channel // 2, 4, stride=2, padding=1),
+                nn.Conv1d(in_channel, channel // 2, 4, stride=2, padding=1),
                 nn.ReLU(inplace=True),
-                nn.Conv2d(channel // 2, channel, 3, padding=1),
+                nn.Conv1d(channel // 2, channel, 3, padding=1),
             ]
 
         for i in range(n_res_block):
@@ -132,7 +132,7 @@ class Decoder(nn.Module):
     ):
         super().__init__()
 
-        blocks = [nn.Conv2d(in_channel, channel, 3, padding=1)]
+        blocks = [nn.Conv1d(in_channel, channel, 3, padding=1)]
 
         for i in range(n_res_block):
             blocks.append(ResBlock(channel, n_res_channel))
@@ -142,9 +142,9 @@ class Decoder(nn.Module):
         if stride == 4:
             blocks.extend(
                 [
-                    nn.ConvTranspose2d(channel, channel // 2, 4, stride=2, padding=1),
+                    nn.ConvTranspose1d(channel, channel // 2, 4, stride=2, padding=1),
                     nn.ReLU(inplace=True),
-                    nn.ConvTranspose2d(
+                    nn.ConvTranspose1d(
                         channel // 2, out_channel, 4, stride=2, padding=1
                     ),
                 ]
@@ -152,7 +152,7 @@ class Decoder(nn.Module):
 
         elif stride == 2:
             blocks.append(
-                nn.ConvTranspose2d(channel, out_channel, 4, stride=2, padding=1)
+                nn.ConvTranspose1d(channel, out_channel, 4, stride=2, padding=1)
             )
 
         self.blocks = nn.Sequential(*blocks)
@@ -176,14 +176,14 @@ class VQVAE(nn.Module):
 
         self.enc_b = Encoder(in_channel, channel, n_res_block, n_res_channel, stride=4)
         self.enc_t = Encoder(channel, channel, n_res_block, n_res_channel, stride=2)
-        self.quantize_conv_t = nn.Conv2d(channel, embed_dim, 1)
+        self.quantize_conv_t = nn.Conv1d(channel, embed_dim, 1)
         self.quantize_t = Quantize(embed_dim, n_embed)
         self.dec_t = Decoder(
             embed_dim, embed_dim, channel, n_res_block, n_res_channel, stride=2
         )
-        self.quantize_conv_b = nn.Conv2d(embed_dim + channel, embed_dim, 1)
+        self.quantize_conv_b = nn.Conv1d(embed_dim + channel, embed_dim, 1)
         self.quantize_b = Quantize(embed_dim, n_embed)
-        self.upsample_t = nn.ConvTranspose2d(
+        self.upsample_t = nn.ConvTranspose1d(
             embed_dim, embed_dim, 4, stride=2, padding=1
         )
         self.dec = Decoder(
@@ -205,17 +205,17 @@ class VQVAE(nn.Module):
         enc_b = self.enc_b(input)
         enc_t = self.enc_t(enc_b)
 
-        quant_t = self.quantize_conv_t(enc_t).permute(0, 2, 3, 1)
+        quant_t = self.quantize_conv_t(enc_t).permute(0, 2, 1)
         quant_t, diff_t, id_t = self.quantize_t(quant_t)
-        quant_t = quant_t.permute(0, 3, 1, 2)
+        quant_t = quant_t.permute(0, 2, 1)
         diff_t = diff_t.unsqueeze(0)
 
         dec_t = self.dec_t(quant_t)
         enc_b = torch.cat([dec_t, enc_b], 1)
 
-        quant_b = self.quantize_conv_b(enc_b).permute(0, 2, 3, 1)
+        quant_b = self.quantize_conv_b(enc_b).permute(0, 2, 1)
         quant_b, diff_b, id_b = self.quantize_b(quant_b)
-        quant_b = quant_b.permute(0, 3, 1, 2)
+        quant_b = quant_b.permute(0, 2, 1)
         diff_b = diff_b.unsqueeze(0)
 
         return quant_t, quant_b, diff_t + diff_b, id_t, id_b
